@@ -1,18 +1,40 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:rome/widgets/bottomnavigationbar.dart';
 import 'package:rome/widgets/listitem.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+import 'config.dart';
 
 Future<List<Photo>> fetchPhotos(http.Client client) async {
-  var rng = Random();
-  final response = await client
-      .get(Uri.parse('https://imperium-romanum.world/categories/?{$rng}'));
 
-  return compute(parsePhotos, response.body);
+  var rng = Random();
+  String responseBody = "";
+  String jsonUrl = Config.jsonUrl;
+  String boxName = Config.boxName;
+
+  await Hive.initFlutter();
+  var box = await Hive.openBox( boxName );
+
+  if( box.get('json_data') == null ){ // if box empty
+    print( 'loading json online' );
+    // get json online
+    final response = await client.get(Uri.parse('$jsonUrl?{$rng}'));
+    responseBody = response.body;
+    // put json in the box
+    box.put('json_data', responseBody);
+  } else { // if box not empty, get json in the box
+    print( 'loading json offline' );
+    responseBody = box.get('json_data');
+  }
+
+  return compute(parsePhotos, responseBody);
 }
 
 // converts response body to List<Photo>.
@@ -72,6 +94,7 @@ class MyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -80,7 +103,7 @@ class MyHomePage extends StatelessWidget {
       bottomNavigationBar: const MyNavigationBar(),
       body: SafeArea(
         child: FutureBuilder<List<Photo>>(
-          future: fetchPhotos(http.Client()),
+          future: fetchPhotos( http.Client()  ),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return const Center(
